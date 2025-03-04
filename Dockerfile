@@ -30,7 +30,7 @@ RUN pnpm install --prod --frozen-lockfile
 COPY --from=builder /app/dist ./dist
 
 # Expose port for the app
-EXPOSE 3000
+EXPOSE 3002
 
 # Start the server
 CMD ["node", "dist/server.js"]

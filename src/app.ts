@@ -18,7 +18,7 @@ setRoutes(app);
 // Socket.IO setup
 setupSocket(server as unknown as Partial<ServerOptions>);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });

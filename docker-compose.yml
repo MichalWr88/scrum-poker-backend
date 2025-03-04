@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   scrum-poker-backend:
@@ -9,9 +9,9 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3002
     ports:
-      - "3000:3000"
+      - "3002:3002"
     # If you need any volumes, add them here
     # volumes:
     #   - ./logs:/app/logs
