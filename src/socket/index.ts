@@ -18,6 +18,11 @@ export enum SocketEvents {
   CLEAR_MY_VOTE = "clear_my_vote",
   VOTES_CLEARED = "votes_cleared",
   TOGGLE_VOTES = "toggle_votes",
+
+  //TASK EVENTS
+  IS_PENDING_NEW_TASK = "is_pending_new_task",
+  FETCHED_NEW_TASK = "fetched_new_task",
+  PENDING_NEW_TASK = "pending_new_task",
 }
 
 // Define types for our votes tracking
@@ -103,6 +108,20 @@ export function setupSocket(server: Partial<ServerOptions>) {
           );
           console.log(`User ${socket.id} voted: ${vote} in room: ${roomId}`);
         }
+      }
+    );
+    socket.on(
+      SocketEvents.FETCHED_NEW_TASK,
+      ({ roomId, task }: { roomId: string; task: object }) => {
+        socket.broadcast.to(roomId).emit(SocketEvents.FETCHED_NEW_TASK, task);
+      }
+    );
+    // Pending new task
+    socket.on(
+      SocketEvents.PENDING_NEW_TASK,
+      ({ roomId }: { roomId: string }) => {
+        socket.broadcast.to(roomId).emit(SocketEvents.IS_PENDING_NEW_TASK);
+        // io.to(roomId).emit(SocketEvents.IS_PENDING_NEW_TASK);
       }
     );
 
