@@ -28,10 +28,15 @@ export enum SocketEvents {
 // Define types for our votes tracking
 interface Vote {
   userId: string;
-  userName: string;
+  user: User;
   value: string | number | null;
 }
-
+type User = {
+  dbId: string;
+  role: string;
+  name: string;
+  email: string;
+};
 // Track rooms and votes
 const roomVotes: Record<string, Record<string, Vote>> = {};
 
@@ -44,7 +49,10 @@ export function setupSocket(server: Partial<ServerOptions>) {
     // Join room event
     socket.on(
       SocketEvents.JOIN_ROOM,
-      ({ roomId, userName }: { roomId: string; userName: string }) => {
+      ({ roomId, user }: { roomId: string; user: User }) => {
+        if (!user) {
+          return;
+        }
         socket.join(roomId);
 
         // Initialize room if it doesn't exist
@@ -55,8 +63,8 @@ export function setupSocket(server: Partial<ServerOptions>) {
         // Add user to room with null vote initially
         roomVotes[roomId][socket.id] = {
           userId: socket.id,
-          userName,
-          value: null,
+          user,
+          value: null, // todo when i have connected to db, i will get the user's vote from db
         };
 
         // Broadcast updated user list to room
@@ -64,7 +72,7 @@ export function setupSocket(server: Partial<ServerOptions>) {
           SocketEvents.ROOM_USERS_UPDATED,
           Object.values(roomVotes[roomId])
         );
-        console.log(`User ${socket.id} (${userName}) joined room: ${roomId}`);
+        console.log(`User  (${user.name}) - ${user.role} joined room: ${roomId}`);
       }
     );
 
