@@ -1,10 +1,7 @@
+import { RequestHandler } from "express";
+import { version } from "../../package.json";
 export class IndexController {
-  public getHome(req: Express.Request, res: Response): void {
-    res.json();
-  }
-
-  public getData(req: Express.Request, res: Response): void {
-    const data = { message: "This is some data from the server." };
-    res.json();
-  }
+  public getStatus: RequestHandler = (req, res) => {
+    res.send("Hello, world! Version: " + version);
+  };
 }
