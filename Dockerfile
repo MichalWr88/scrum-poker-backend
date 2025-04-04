@@ -9,9 +9,10 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copy source code and config
 COPY tsconfig.json ./
 COPY src ./src
+COPY .env ./
 
 # Build application
 RUN pnpm build
@@ -26,8 +27,9 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --prod --frozen-lockfile
 
-# Copy built files from builder stage
+# Copy built files and .env from builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/.env ./
 
 # Expose port for the app
 EXPOSE 3002

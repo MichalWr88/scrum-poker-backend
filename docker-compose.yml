@@ -7,11 +7,13 @@ services:
       dockerfile: Dockerfile
     container_name: scrum-poker-backend
     restart: unless-stopped
+    env_file: .env
     environment:
       - NODE_ENV=production
       - PORT=3002
+      - MONGO_USER=${MONGO_USER}
+      - MONGO_PASSWORD=${MONGO_PASSWORD}
+      - MONGO_CLUSTER=${MONGO_CLUSTER}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
     ports:
       - "3002:3002"
-    # If you need any volumes, add them here
-    # volumes:
-    #   - ./logs:/app/logs
