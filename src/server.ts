@@ -1,20 +1,35 @@
 import express from "express";
-import { createServer } from "node:http";
-// import { fileURLToPath } from "node:url";
-// import { dirname, join } from "node:path";
-import { Server, ServerOptions } from "socket.io";
+import http from "http";
 import { setupSocket } from "./socket";
+import { setRoutes } from "./routes/api";
+import { initMongoDB } from "./mongo/mongoProvider";
+import { ServerOptions } from "socket.io";
 
 const app = express();
-const server = createServer(app);
+const server = http.createServer(app);
+
+// Middleware setup
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// API routes setup
+setRoutes(app);
+
+// Socket.IO setup
 setupSocket(server as unknown as Partial<ServerOptions>);
 
-// const __dirname = dirname(fileURLToPath(import.meta.url));
+const PORT = process.env.PORT || 3002;
 
-app.get("/", (req, res) => {
-  res.send({ message: "Hello, world!" });
-});
+async function startServer() {
+  try {
+    await initMongoDB();
+    server.listen(PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+}
 
-server.listen(3002, () => {
-  console.log("server running at http://localhost:3002");
-});
+startServer();
