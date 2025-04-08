@@ -35,4 +35,4 @@ COPY --from=builder /app/.env ./
 EXPOSE 3002
 
 # Start the server
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]
