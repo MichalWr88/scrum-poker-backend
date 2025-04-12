@@ -12,8 +12,13 @@ export default class SubjectService {
   }
 
   public async addSubject(jiraId: string) {
-    const newSubject = new SubjectModel({ jiraId });
-    await newSubject.save();
+    const newSubject = SubjectModel.findOneAndUpdate(
+      { jiraId },
+      { $setOnInsert: { jiraId } },
+      { upsert: true, new: true }
+    );
+    // const newSubject = new SubjectModel({ jiraId });
+    // await newSubject.save();
     return newSubject;
   }
 
