@@ -1,44 +1,9 @@
 import { Server, ServerOptions } from "socket.io";
+import roomService from "../mongo/room/roomService";
+import { RoomVotes, SocketEventPayloads, SocketEvents, User } from "../types";
 
-// Socket event enum for type safety
-export enum SocketEvents {
-  // Connection events
-  CONNECT = "connection",
-  DISCONNECT = "disconnect",
-
-  // Room events
-  JOIN_ROOM = "join_room",
-  LEAVE_ROOM = "leave_room",
-  ROOM_USERS_UPDATED = "room_users_updated",
-
-  // Voting events
-  SEND_VOTE = "send_vote",
-  VOTES_UPDATED = "votes_updated",
-  CLEAR_ALL_VOTES = "clear_all_votes",
-  CLEAR_MY_VOTE = "clear_my_vote",
-  VOTES_CLEARED = "votes_cleared",
-  TOGGLE_VOTES = "toggle_votes",
-
-  //TASK EVENTS
-  IS_PENDING_NEW_TASK = "is_pending_new_task",
-  FETCHED_NEW_TASK = "fetched_new_task",
-  PENDING_NEW_TASK = "pending_new_task",
-}
-
-// Define types for our votes tracking
-interface Vote {
-  userId: string;
-  user: User;
-  value: string | number | null;
-}
-type User = {
-  dbId: string;
-  role: string;
-  name: string;
-  email: string;
-};
 // Track rooms and votes
-const roomVotes: Record<string, Record<string, Vote>> = {};
+const roomVotes: RoomVotes = {};
 
 export function setupSocket(server: Partial<ServerOptions>) {
   const io = new Server(server);
@@ -49,7 +14,7 @@ export function setupSocket(server: Partial<ServerOptions>) {
     // Join room event
     socket.on(
       SocketEvents.JOIN_ROOM,
-      ({ roomId, user }: { roomId: string; user: User }) => {
+      async ({ roomId, user }: SocketEventPayloads[SocketEvents.JOIN_ROOM]) => {
         if (!user) {
           return;
         }
@@ -57,62 +22,91 @@ export function setupSocket(server: Partial<ServerOptions>) {
 
         // Initialize room if it doesn't exist
         if (!roomVotes[roomId]) {
-          roomVotes[roomId] = {};
+          const room = await roomService.getRoom(roomId);
+          if (!room) {
+            console.error(`Room ${roomId} not found`);
+            return;
+          }
+          roomVotes[roomId] = {
+            id: roomId,
+            name: room.name,
+            currentSubject: room.lastSubject ?? "",
+            showVotes: false,
+            votes: {
+              [socket.id]: {
+                userId: socket.id,
+                user: {
+                  dbId: user.dbId,
+                  role: user.role,
+                  name: user.name,
+                  email: user.email,
+                },
+                value: null,
+              },
+            },
+          };
+        } else {
+          roomVotes[roomId].votes[socket.id] = {
+            userId: socket.id,
+            user: {
+              dbId: user.dbId,
+              role: user.role,
+              name: user.name,
+              email: user.email,
+            },
+            value: null,
+          };
         }
-
-        // Add user to room with null vote initially
-        roomVotes[roomId][socket.id] = {
-          userId: socket.id,
-          user,
-          value: null, // todo when i have connected to db, i will get the user's vote from db
-        };
-
         // Broadcast updated user list to room
         io.to(roomId).emit(
           SocketEvents.ROOM_USERS_UPDATED,
-          Object.values(roomVotes[roomId])
+          roomVotes[roomId].votes
         );
-        console.log(`User  (${user.name}) - ${user.role} joined room: ${roomId}`);
+        console.log(
+          `User  (${user.name}) - ${user.role} joined room: ${roomId}`
+        );
       }
     );
 
     // Leave room event
-    socket.on(SocketEvents.LEAVE_ROOM, ({ roomId }: { roomId: string }) => {
-      socket.leave(roomId);
+    socket.on(
+      SocketEvents.LEAVE_ROOM,
+      ({ roomId }: SocketEventPayloads[SocketEvents.LEAVE_ROOM]) => {
+        socket.leave(roomId);
 
-      // Remove user's vote from room
-      if (roomVotes[roomId] && roomVotes[roomId][socket.id]) {
-        delete roomVotes[roomId][socket.id];
+        if (roomVotes[roomId] && roomVotes[roomId].votes[socket.id]) {
+          delete roomVotes[roomId].votes[socket.id];
+        }
+
+        // Clean up empty rooms
+        if (roomVotes[roomId] && Object.keys(roomVotes[roomId]).length === 0) {
+          delete roomVotes[roomId];
+        } else if (roomVotes[roomId]) {
+          // Broadcast updated user list to room
+          io.to(roomId).emit(
+            SocketEvents.ROOM_USERS_UPDATED,
+            Object.values(roomVotes[roomId])
+          );
+        }
+
+        console.log(`User ${socket.id} left room: ${roomId}`);
       }
-
-      // Clean up empty rooms
-      if (roomVotes[roomId] && Object.keys(roomVotes[roomId]).length === 0) {
-        delete roomVotes[roomId];
-      } else if (roomVotes[roomId]) {
-        // Broadcast updated user list to room
-        io.to(roomId).emit(
-          SocketEvents.ROOM_USERS_UPDATED,
-          Object.values(roomVotes[roomId])
-        );
-      }
-
-      console.log(`User ${socket.id} left room: ${roomId}`);
-    });
+    );
 
     // Send vote event
     socket.on(
       SocketEvents.SEND_VOTE,
-      ({ roomId, vote }: { roomId: string; vote: string | number }) => {
+      ({ roomId, vote }: SocketEventPayloads[SocketEvents.SEND_VOTE]) => {
         console.log(`User ${socket.id} voted: ${vote} in room: ${roomId}`);
         console.log(roomVotes);
-        if (roomVotes[roomId] && roomVotes[roomId][socket.id]) {
+        if (roomVotes[roomId] && roomVotes[roomId].votes[socket.id]) {
           // Update user's vote
-          roomVotes[roomId][socket.id].value = vote;
+          roomVotes[roomId].votes[socket.id].value = vote;
 
           // Send updated votes to the room
           io.to(roomId).emit(
             SocketEvents.VOTES_UPDATED,
-            Object.values(roomVotes[roomId])
+            roomVotes[roomId].votes
           );
           console.log(`User ${socket.id} voted: ${vote} in room: ${roomId}`);
         }
@@ -120,14 +114,17 @@ export function setupSocket(server: Partial<ServerOptions>) {
     );
     socket.on(
       SocketEvents.FETCHED_NEW_TASK,
-      ({ roomId, task }: { roomId: string; task: object }) => {
+      ({
+        roomId,
+        task,
+      }: SocketEventPayloads[SocketEvents.FETCHED_NEW_TASK]) => {
         socket.broadcast.to(roomId).emit(SocketEvents.FETCHED_NEW_TASK, task);
       }
     );
     // Pending new task
     socket.on(
       SocketEvents.PENDING_NEW_TASK,
-      ({ roomId }: { roomId: string }) => {
+      ({ roomId }: SocketEventPayloads[SocketEvents.PENDING_NEW_TASK]) => {
         socket.broadcast.to(roomId).emit(SocketEvents.IS_PENDING_NEW_TASK);
         // io.to(roomId).emit(SocketEvents.IS_PENDING_NEW_TASK);
       }
@@ -136,17 +133,17 @@ export function setupSocket(server: Partial<ServerOptions>) {
     // Clear all votes for a room
     socket.on(
       SocketEvents.CLEAR_ALL_VOTES,
-      ({ roomId }: { roomId: string }) => {
+      ({ roomId }: SocketEventPayloads[SocketEvents.CLEAR_ALL_VOTES]) => {
         if (roomVotes[roomId]) {
           // Set all votes to null
-          Object.keys(roomVotes[roomId]).forEach((userId) => {
-            roomVotes[roomId][userId].value = null;
+          Object.keys(roomVotes[roomId].votes).forEach((userId) => {
+            roomVotes[roomId].votes[userId].value = null;
           });
 
           // Broadcast cleared votes
           io.to(roomId).emit(
             SocketEvents.VOTES_UPDATED,
-            Object.values(roomVotes[roomId])
+            roomVotes[roomId].votes
           );
           io.to(roomId).emit(SocketEvents.VOTES_CLEARED);
           console.log(`All votes cleared in room: ${roomId}`);
@@ -155,29 +152,34 @@ export function setupSocket(server: Partial<ServerOptions>) {
     );
 
     // Clear my vote
-    socket.on(SocketEvents.CLEAR_MY_VOTE, ({ roomId }: { roomId: string }) => {
-      if (roomVotes[roomId] && roomVotes[roomId][socket.id]) {
-        // Clear just this user's vote
-        roomVotes[roomId][socket.id].value = null;
+    socket.on(
+      SocketEvents.CLEAR_MY_VOTE,
+      ({ roomId }: SocketEventPayloads[SocketEvents.CLEAR_MY_VOTE]) => {
+        if (roomVotes[roomId] && roomVotes[roomId].votes[socket.id]) {
+          // Clear just this user's vote
+          roomVotes[roomId].votes[socket.id].value = null;
 
-        // Broadcast updated votes
-        io.to(roomId).emit(
-          SocketEvents.VOTES_UPDATED,
-          Object.values(roomVotes[roomId])
-        );
-        console.log(`User ${socket.id} cleared their vote in room: ${roomId}`);
+          // Broadcast updated votes
+          io.to(roomId).emit(
+            SocketEvents.VOTES_UPDATED,
+            roomVotes[roomId].votes
+          );
+          console.log(
+            `User ${socket.id} cleared their vote in room: ${roomId}`
+          );
+        }
       }
-    });
+    );
 
     socket.on(
       SocketEvents.TOGGLE_VOTES,
-      ({ roomId, show }: { roomId: string; show: boolean }) => {
+      ({ roomId, show }: SocketEventPayloads[SocketEvents.TOGGLE_VOTES]) => {
         if (roomVotes[roomId]) {
           if (show) {
             // Send users' votes to all users in the room
             io.to(roomId).emit(
               SocketEvents.VOTES_UPDATED,
-              Object.values(roomVotes[roomId])
+              roomVotes[roomId].votes
             );
           }
           // Send hide/show status to all users in the room
@@ -192,17 +194,17 @@ export function setupSocket(server: Partial<ServerOptions>) {
 
       // Remove user from all rooms they were in
       Object.keys(roomVotes).forEach((roomId) => {
-        if (roomVotes[roomId][socket.id]) {
-          delete roomVotes[roomId][socket.id];
+        if (roomVotes[roomId].votes[socket.id]) {
+          delete roomVotes[roomId].votes[socket.id];
 
           // Clean up empty rooms
-          if (Object.keys(roomVotes[roomId]).length === 0) {
+          if (Object.keys(roomVotes[roomId].votes).length === 0) {
             delete roomVotes[roomId];
           } else {
             // Broadcast updated user list to room
             io.to(roomId).emit(
               SocketEvents.ROOM_USERS_UPDATED,
-              Object.values(roomVotes[roomId])
+              Object.values(roomVotes[roomId].votes)
             );
           }
         }

@@ -19,7 +19,7 @@ export class RoomService {
     return newRoom;
   }
   public async getRoom(name: string) {
-    return RoomModel.findOne({ name });
+    return RoomModel.findOne<Room>({ name }, {}, { new: true });
   }
 
   public async editRoomName(
@@ -45,3 +45,5 @@ export class RoomService {
     return room;
   }
 }
+const roomService = new RoomService();
+export default roomService;
