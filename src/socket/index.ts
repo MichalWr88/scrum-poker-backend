@@ -20,7 +20,6 @@ export enum SocketEvents {
   TOGGLE_VOTES = "toggle_votes",
 
   //TASK EVENTS
-  IS_PENDING_NEW_TASK = "is_pending_new_task",
   FETCHED_NEW_TASK = "fetched_new_task",
   PENDING_NEW_TASK = "pending_new_task",
 }
@@ -128,7 +127,7 @@ export function setupSocket(server: Partial<ServerOptions>) {
     socket.on(
       SocketEvents.PENDING_NEW_TASK,
       ({ roomId }: { roomId: string }) => {
-        socket.broadcast.to(roomId).emit(SocketEvents.IS_PENDING_NEW_TASK);
+        socket.broadcast.to(roomId).emit(SocketEvents.PENDING_NEW_TASK);
         // io.to(roomId).emit(SocketEvents.IS_PENDING_NEW_TASK);
       }
     );
@@ -148,7 +147,7 @@ export function setupSocket(server: Partial<ServerOptions>) {
             SocketEvents.VOTES_UPDATED,
             Object.values(roomVotes[roomId])
           );
-          io.to(roomId).emit(SocketEvents.VOTES_CLEARED);
+          io.to(roomId).emit(SocketEvents.VOTES_CLEARED, { clearType: "all" });
           console.log(`All votes cleared in room: ${roomId}`);
         }
       }
@@ -165,6 +164,10 @@ export function setupSocket(server: Partial<ServerOptions>) {
           SocketEvents.VOTES_UPDATED,
           Object.values(roomVotes[roomId])
         );
+        io.to(roomId).emit(SocketEvents.VOTES_CLEARED, {
+          clearType: "single",
+          userId: socket.id,
+        });
         console.log(`User ${socket.id} cleared their vote in room: ${roomId}`);
       }
     });
